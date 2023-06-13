@@ -2,16 +2,17 @@ import re
 
 from discord.ext import commands
 
-
 class Autobuy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.price_message = None
 
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.guild and self.bot.state:
             for embed in message.embeds:
                 embed = embed.to_dict()
+
                 # Buy lifesavers
                 try:
                     if (
@@ -20,50 +21,44 @@ class Autobuy(commands.Cog):
                     ):
                         remaining = int(
                             re.search(
-                                "have (.*?)x Life Saver",
+                                r"have (.*?)x Life Saver",
                                 message.components[0].children[0].label,
                             ).group(1)
                         )
                         required = int(
                             self.bot.config_dict["autobuy"]["lifesavers"]["amount"]
                         )
-                        if remaining < required:
-                            channel = await message.author.create_dm()
-                            await self.bot.send(
-                                "withdraw",
-                                channel,
-                                amount=str((required - remaining) * 200000),
-                            )
-                            await self.bot.sub_send(
-                                "shop",
-                                "buy",
-                                channel,
-                                item="Life Saver",
-                                quantity=str(required - remaining),
-                            )
-                            self.bot.log(
-                                f"Bought {required - remaining} Lifesavers",
-                                "yellow",
-                            )
+                        if remaining < required and self.price_message is not None:
+                            price = await self.get_price_from_message(self.price_message)
+                            if price is not None:
+                                channel = await message.author.create_dm()
+                                quantity = required - remaining
+                                amount = str(quantity * price)
+                                await self.bot.send("withdraw", channel, amount=amount)
+                                await self.bot.sub_send(
+                                    "shop",
+                                    "buy",
+                                    channel,
+                                    item="Life Saver",
+                                    quantity=str(quantity),
+                                )
+                                self.bot.log(
+                                    f"Bought {quantity} Lifesavers",
+                                    "yellow",
+                                )
                             return
                 except KeyError:
                     pass
 
-                # Confirm purchase
-                try:
-                    if (
-                        embed["title"] == "Pending Confirmation"
-                        and self.bot.config_dict["autobuy"]["lifesavers"]["state"]
-                    ):
-                        await self.bot.click(message, 0, 1)
-                except KeyError:
-                    pass
+    async def set_price_message(self, message):
+        self.price_message = message
 
-        if message.channel.id != self.bot.channel_id or not self.bot.state:
-            return
-
-        for embed in message.embeds:
-            embed = embed.to_dict()
+    async def get_price_from_message(self, message):
+        content = message.content
+        price_match = re.search(r"/shop buy for (\d+)", content)
+        if price_match:
+            return int(price_match.group(1))
+        return None
             # Shovel
             try:
                 if (
