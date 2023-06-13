@@ -1,5 +1,4 @@
 import re
-
 from discord.ext import commands
 
 class Autobuy(commands.Cog):
@@ -28,13 +27,12 @@ class Autobuy(commands.Cog):
                         required = int(
                             self.bot.config_dict["autobuy"]["lifesavers"]["amount"]
                         )
-                        if remaining < required and self.price_message is not None:
-                            price = await self.get_price_from_message(self.price_message)
+                        if remaining < required:
+                            channel = await message.author.create_dm()
+                            await self.bot.send("withdraw", channel, amount=f"{(required - remaining) * 200000}")
+                            price = await self.get_price_from_shop(channel, "Life Saver")
                             if price is not None:
-                                channel = await message.author.create_dm()
                                 quantity = required - remaining
-                                amount = str(quantity * price)
-                                await self.bot.send("withdraw", channel, amount=amount)
                                 await self.bot.sub_send(
                                     "shop",
                                     "buy",
@@ -53,12 +51,13 @@ class Autobuy(commands.Cog):
     async def set_price_message(self, message):
         self.price_message = message
 
-    async def get_price_from_message(self, message):
-        content = message.content
-        price_match = re.search(r"/shop buy for (\d+)", content)
+    async def get_price_from_shop(self, channel, item):
+        response = await self.bot.sub_send("item", channel, item=item)
+        price_match = re.search(r"Price: (\d+)", response.content)
         if price_match:
             return int(price_match.group(1))
         return None
+
             # Shovel
             try:
                 if (
