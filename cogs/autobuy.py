@@ -15,48 +15,50 @@ class Autobuy(commands.Cog):
                 # Buy lifesavers
                 try:
                     if (
-                        embed["title"] == "Your lifesaver protected you!"
-                        and self.bot.config_dict["autobuy"]["lifesavers"]["state"]
+                        embed.get("title") == "Your lifesaver protected you!"
+                        and self.bot.config_dict.get("autobuy", {}).get("lifesavers", {}).get("state")
                     ):
-                        remaining = int(
-                            re.search(
-                                r"have (.*?)x Life Saver",
-                                message.components[0].children[0].label,
-                            ).group(1)
-                        )
-                        required = int(
-                            self.bot.config_dict["autobuy"]["lifesavers"]["amount"]
-                        )
-                        if remaining < required:
-                            channel = await message.author.create_dm()
-                            await self.bot.send("withdraw", channel, amount=f"{(required - remaining) * 200000}")
-                            price = await self.get_price_from_shop(channel, "Life Saver")
-                            if price is not None:
-                                quantity = required - remaining
-                                await self.bot.sub_send(
-                                    "shop",
-                                    "buy",
-                                    channel,
-                                    item="Life Saver",
-                                    quantity=str(quantity),
-                                )
-                                self.bot.log(
-                                    f"Bought {quantity} Lifesavers",
-                                    "yellow",
-                                )
-                            return
+                        description = embed.get("description")
+                        if description:
+                            remaining_match = re.search(r"have (.*?)x Life Saver", description)
+                            if remaining_match:
+                                remaining = int(remaining_match.group(1))
+                                required = self.bot.config_dict.get("autobuy", {}).get("lifesavers", {}).get("amount")
+                                if required is not None and remaining < required and self.price_message is not None:
+                                    price = await self.get_price_from_message(self.price_message)
+                                    if price is not None:
+                                        channel = await message.author.create_dm()
+                                        quantity = required - remaining
+                                        amount = str(quantity * price)
+                                        await self.bot.send("withdraw", channel, amount=amount)
+                                        await self.bot.sub_send(
+                                            "shop",
+                                            "buy",
+                                            channel,
+                                            item="Life Saver",
+                                            quantity=str(quantity),
+                                        )
+                                        self.bot.log(
+                                            f"Bought {quantity} Lifesavers",
+                                            "yellow",
+                                        )
+                                    return
                 except KeyError:
                     pass
 
     async def set_price_message(self, message):
         self.price_message = message
 
-    async def get_price_from_shop(self, channel, item):
-        response = await self.bot.sub_send("item", channel, item=item)
-        price_match = re.search(r"Price: (\d+)", response.content)
+    async def get_price_from_message(self, message):
+        content = message.content
+        price_match = re.search(r"/shop buy for ⏣ ([\d,]+)", content)
         if price_match:
-            return int(price_match.group(1))
+            price_string = price_match.group(1).replace(',', '')
+            return int(price_string)
         return None
+
+async def setup(bot):
+    await bot.add_cog(Autobuy(bot))
 
             # Shovel
             try:
